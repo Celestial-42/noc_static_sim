@@ -122,6 +122,56 @@ export function laneIdFor(axis, count, src, tgt) {
 }
 
 /**
+ * CHI node roles. Channels already own hue, so a node's type is carried by its
+ * marker shape plus the dash pattern of its local stub — silent on the links.
+ */
+export const NODE_TYPES = [
+  { id: 'RNF', name: 'Request Node · fully coherent', role: '全一致请求', shape: 'circle', dash: null },
+  { id: 'RNI', name: 'Request Node · I/O', role: 'IO 请求', shape: 'square', dash: '4 2.2' },
+  { id: 'HNF', name: 'Home Node · fully coherent', role: '全一致归属', shape: 'hex', dash: '0.1 2.8' },
+  { id: 'SN', name: 'Slave Node', role: '从节点', shape: 'triangle', dash: '4.5 2 0.1 2' },
+  { id: 'HNI', name: 'Home Node · I/O', role: 'IO 归属', shape: 'diamond', dash: '7 3' }
+];
+
+export const DEFAULT_NODE_TYPE = 'RNF';
+
+export function normalizeNodeType(value) {
+  return NODE_TYPES.some((t) => t.id === value) ? value : DEFAULT_NODE_TYPE;
+}
+
+export function nodeTypeOf(value) {
+  return NODE_TYPES.find((t) => t.id === value) ?? NODE_TYPES[0];
+}
+
+export function nodeDash(value) {
+  return nodeTypeOf(value).dash ?? undefined;
+}
+
+// Circumradius per shape, tuned so every glyph covers a similar visual weight.
+const SHAPE_GEOM = {
+  square: { sides: 4, start: -45, scale: 1.06 },
+  diamond: { sides: 4, start: 0, scale: 1.14 },
+  triangle: { sides: 3, start: -90, scale: 1.28 },
+  hex: { sides: 6, start: 0, scale: 1.04 }
+};
+
+/** Marker outline centred on (0,0); circles use arcs, polygons a vertex ring. */
+export function nodeShapePath(value, r) {
+  const { shape } = nodeTypeOf(value);
+  if (shape === 'circle') {
+    return `M ${r} 0 A ${r} ${r} 0 1 0 ${-r} 0 A ${r} ${r} 0 1 0 ${r} 0 Z`;
+  }
+  const g = SHAPE_GEOM[shape];
+  const rr = r * g.scale;
+  const points = [];
+  for (let i = 0; i < g.sides; i++) {
+    const a = ((g.start + (360 / g.sides) * i) * Math.PI) / 180;
+    points.push(`${(Math.cos(a) * rr).toFixed(2)} ${(Math.sin(a) * rr).toFixed(2)}`);
+  }
+  return `M ${points.join(' L ')} Z`;
+}
+
+/**
  * Static traffic analysis.
  * Each endpoint emits zero or more flows per channel; a flow injects `rate`
  * (fraction of one link's bandwidth) toward its target. Every flow follows the

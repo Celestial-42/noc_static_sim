@@ -1,5 +1,6 @@
 <script>
-  import { channelFlows, channelRate, dirKey, endpointLabel, laneIdFor, parseRouterKey, routerKey } from './model.js';
+  import { channelFlows, channelRate, dirKey, endpointLabel, laneIdFor, NODE_TYPES, nodeTypeOf, parseRouterKey, routerKey } from './model.js';
+  import NodeGlyph from './NodeGlyph.svelte';
 
   let {
     selection,
@@ -126,6 +127,28 @@
       <span class="subject-meta">Router ({endpoint.x},{endpoint.y}) · {SLOT_NAMES[(endpoint.slot ?? 0) % 4]}</span>
     </div>
 
+    <div class="type-block">
+      <div class="type-head">
+        <span class="field-label">节点类型</span>
+        <span class="type-name">{nodeTypeOf(endpoint.type).name}</span>
+      </div>
+      <div class="type-picker" role="radiogroup" aria-label="节点类型">
+        {#each NODE_TYPES as t (t.id)}
+          <button
+            class="type-btn"
+            class:on={endpoint.type === t.id}
+            role="radio"
+            aria-checked={endpoint.type === t.id}
+            title={`${t.id} · ${t.name}`}
+            onclick={() => (endpoint.type = t.id)}
+          >
+            <NodeGlyph type={t.id} size={15} />
+            <span class="mono">{t.id}</span>
+          </button>
+        {/each}
+      </div>
+    </div>
+
     {#if endpointStats}
       <div class="sub-stats">
         <div><span class="k">出向</span><span class="v mono">{endpointStats.rate.toFixed(2)}×</span></div>
@@ -192,7 +215,10 @@
           {#if slot.endpoint}
             {@const rate = channelRate(slot.endpoint, activeChannel)}
             <button class="slot-btn" onclick={() => onSelect('endpoint', slot.endpoint.id)}>
-              <span class="mono">{endpointLabel(slot.endpoint.id)}</span>
+              <span class="slot-id">
+                <NodeGlyph type={slot.endpoint.type} size={11} color="#7b7568" />
+                <span class="mono">{endpointLabel(slot.endpoint.id)}</span>
+              </span>
               <span class="mono slot-rate">{rate.toFixed(2)}×</span>
             </button>
           {:else}
@@ -301,6 +327,64 @@
   .subject-meta {
     font-size: 11px;
     color: var(--muted);
+  }
+
+  .type-block {
+    margin-bottom: 12px;
+  }
+
+  .type-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 5px;
+  }
+
+  .type-name {
+    font-size: 9.5px;
+    color: #a9a190;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .type-picker {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 4px;
+  }
+
+  .type-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    padding: 5px 1px 4px;
+    font-size: 8.5px;
+    letter-spacing: 0.02em;
+    color: #8b8474;
+    background: #fbf7ef;
+    border: 1px solid var(--line-2);
+    border-radius: 9px;
+    transition: color 0.16s var(--ease), background 0.16s var(--ease), border-color 0.16s var(--ease);
+  }
+
+  .type-btn:hover {
+    color: var(--ink-2);
+    border-color: #d6cbb6;
+  }
+
+  .type-btn.on {
+    color: var(--accent);
+    background: var(--accent-2);
+    border-color: #cfe0da;
+  }
+
+  .slot-id {
+    display: flex;
+    align-items: center;
+    gap: 5px;
   }
 
   .sub-stats {

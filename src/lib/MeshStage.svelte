@@ -1,5 +1,17 @@
 <script>
-  import { channelFlows, channelRate, clamp, dirKey, endpointLabel, parseRouterKey, routerKey, undirectedKey } from './model.js';
+  import {
+    channelFlows,
+    channelRate,
+    clamp,
+    dirKey,
+    endpointLabel,
+    nodeDash,
+    nodeShapePath,
+    nodeTypeOf,
+    parseRouterKey,
+    routerKey,
+    undirectedKey
+  } from './model.js';
   import { arrowColor, loadColor, loadOpacity, loadWidth } from './theme.js';
 
   let {
@@ -190,8 +202,9 @@
       }
       return {
         kind: 'endpoint',
-        title: `${endpointLabel(ep.id)} · R(${ep.x},${ep.y})`,
+        title: `${endpointLabel(ep.id)} · ${nodeTypeOf(ep.type).id} · R(${ep.x},${ep.y})`,
         meta,
+        typeName: nodeTypeOf(ep.type).name,
         rows
       };
     }
@@ -812,8 +825,9 @@
               x2={p.x - p.dx * 10}
               y2={p.y - p.dy * 10}
               stroke={activeColor}
-              stroke-opacity={ep.id === previewEp?.id ? 0.9 : 0.32}
-              stroke-width={ep.id === previewEp?.id ? 1.6 : 1}
+              stroke-opacity={ep.id === previewEp?.id ? 0.9 : 0.45}
+              stroke-width={ep.id === previewEp?.id ? 1.6 : 1.1}
+              stroke-dasharray={nodeDash(ep.type)}
             />
           {/each}
 
@@ -870,6 +884,7 @@
             {@const rate = channelRate(ep, activeChannel)}
             {@const isPreview = ep.id === previewEp?.id}
             {@const bodyR = 6.2 + Math.min(rate, 1) * 2.9}
+            {@const bodyD = nodeShapePath(ep.type, bodyR)}
             <g
               class="endpoint"
               role="button"
@@ -888,17 +903,17 @@
                 onSelect('endpoint', ep.id);
               }}
             >
-              <circle
+              <path
                 class="endpoint-body"
                 class:active={isPreview}
-                cx={p.x}
-                cy={p.y}
-                r={bodyR}
+                d={bodyD}
+                transform={`translate(${p.x} ${p.y})`}
                 fill={rate > 0 ? activeColor : 'none'}
                 fill-opacity={Math.min(1, 0.2 + rate * 1.05)}
                 stroke={activeColor}
                 stroke-opacity={rate > 0 ? 1 : 0.42}
                 stroke-width="1.5"
+                stroke-linejoin="round"
               />
               {#if rate > 0.55}
                 <circle
@@ -1049,6 +1064,8 @@
       {:else if hoverCard.kind === 'endpoint'}
         {#if hoverCard.meta}
           <div class="callout-meta">{hoverCard.meta}</div>
+        {:else}
+          <div class="callout-meta">{hoverCard.typeName}</div>
         {/if}
         <div class="callout-rows">
           {#each hoverCard.rows as row}
@@ -1263,6 +1280,7 @@
 
   .stub {
     fill: none;
+    stroke-linecap: round;
     transition: stroke-opacity 0.2s var(--ease);
   }
 
@@ -1272,7 +1290,7 @@
   }
 
   .endpoint-body {
-    transition: fill-opacity 0.3s var(--ease), stroke 0.3s var(--ease), r 0.2s var(--ease);
+    transition: fill-opacity 0.3s var(--ease), stroke 0.3s var(--ease);
   }
 
   .endpoint-label {

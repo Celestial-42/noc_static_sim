@@ -2,7 +2,9 @@
   import {
     DEFAULT_CHANNELS,
     DEFAULT_LANES,
+    DEFAULT_NODE_TYPE,
     LANE_AXES,
+    NODE_TYPES,
     bottlenecksOf,
     clamp,
     dirKey,
@@ -10,6 +12,7 @@
     makeMesh,
     normalizeLaneAxis,
     normalizeLaneCount,
+    normalizeNodeType,
     parseRouterKey
   } from './lib/model.js';
   import { CHANNEL_COLORS } from './lib/theme.js';
@@ -19,6 +22,7 @@
   import ChannelCard from './lib/ChannelCard.svelte';
   import Inspector from './lib/Inspector.svelte';
   import BottleneckCard from './lib/BottleneckCard.svelte';
+  import NodeGlyph from './lib/NodeGlyph.svelte';
   import NumberTween from './lib/NumberTween.svelte';
 
   const MAX_DIM = 12;
@@ -195,7 +199,7 @@
     for (const ch of channels) {
       flows[ch.id] = [{ target: partner?.id ?? -1, rate: ch.id === activeChannel && partner ? 0.1 : 0 }];
     }
-    endpoints.push({ id, x, y, slot, flows });
+    endpoints.push({ id, x, y, slot, type: DEFAULT_NODE_TYPE, flows });
     selected = { kind: 'endpoint', id };
   }
 
@@ -220,7 +224,7 @@
 
   function exportJSON() {
     const payload = {
-      version: 3,
+      version: 4,
       cols,
       rows,
       routing,
@@ -278,6 +282,7 @@
           x: clamp(Number(ep.x) || 0, 0, c - 1),
           y: clamp(Number(ep.y) || 0, 0, r - 1),
           slot: Number(ep.slot) || 0,
+          type: normalizeNodeType(ep.type),
           flows
         };
       });
@@ -416,7 +421,31 @@
             {channels.length} CHANNELS
           </p>
         </footer>
-        <span class="stage-bottom-spacer"></span>
+        <div class="node-legend">
+          <div class="node-legend-head">
+            <span class="legend-title">节点类型</span>
+            <span class="legend-unit mono">形状 · 线型</span>
+          </div>
+          {#each NODE_TYPES as t (t.id)}
+            <div class="node-row" title={`${t.id} · ${t.name}`}>
+              <NodeGlyph type={t.id} size={13} color="#6a6459" />
+              <svg class="dash-line" width="16" height="4" viewBox="0 0 16 4" aria-hidden="true">
+                <line
+                  x1="1"
+                  y1="2"
+                  x2="15"
+                  y2="2"
+                  stroke="#8b8474"
+                  stroke-width="1.3"
+                  stroke-linecap="round"
+                  stroke-dasharray={t.dash}
+                />
+              </svg>
+              <span class="mono node-id">{t.id}</span>
+              <span class="node-role">{t.role}</span>
+            </div>
+          {/each}
+        </div>
       </div>
 
       {#if toast}
@@ -614,7 +643,7 @@
     z-index: 12;
     flex: none;
     display: grid;
-    grid-template-columns: 156px minmax(0, 1fr) 156px;
+    grid-template-columns: 168px minmax(0, 1fr) 168px;
     align-items: end;
     gap: 16px;
     padding: 8px 18px 15px;
@@ -623,10 +652,6 @@
 
   .stage-bottom > * {
     pointer-events: auto;
-  }
-
-  .stage-bottom-spacer {
-    pointer-events: none;
   }
 
   .stage-channel {
@@ -703,13 +728,56 @@
   }
 
   .legend {
-    width: 156px;
+    width: 168px;
     padding: 9px 11px 8px;
     background: rgba(255, 253, 248, 0.86);
     backdrop-filter: blur(8px);
     border: 1px solid var(--line);
     border-radius: 12px;
     box-shadow: var(--shadow-sm);
+  }
+
+  .node-legend {
+    width: 168px;
+    padding: 9px 11px 8px;
+    background: rgba(255, 253, 248, 0.86);
+    backdrop-filter: blur(8px);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .node-legend-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 6px;
+    margin-bottom: 5px;
+  }
+
+  .node-row {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    height: 15px;
+  }
+
+  .dash-line {
+    flex: none;
+    color: #8b8474;
+  }
+
+  .node-id {
+    font-size: 8.5px;
+    letter-spacing: 0.02em;
+    color: var(--ink-3);
+  }
+
+  .node-role {
+    margin-left: auto;
+    font-size: 8px;
+    color: #a9a190;
+    white-space: nowrap;
   }
 
   .legend-head {
@@ -888,6 +956,10 @@
     }
 
     .legend {
+      display: none;
+    }
+
+    .node-legend {
       display: none;
     }
   }

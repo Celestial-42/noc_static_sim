@@ -40,6 +40,15 @@ export function demoEndpoints(cols, rows, channels = DEFAULT_CHANNELS) {
     return id;
   };
 
+  // The hotspot behaves as a home node, the centre as its I/O counterpart,
+  // the far corner as a slave; the rest alternate between the two request nodes.
+  const typeOf = (id, x, y) => {
+    if (id === hotId) return 'HNF';
+    if (id === centerId) return 'HNI';
+    if (id === farId) return 'SN';
+    return (x + y) % 2 === 0 ? 'RNF' : 'RNI';
+  };
+
   return cells.map(({ id, x, y }) => {
     const isHot = id === hotId;
     const reqIdle = !isHot && cells.length > 4 && rnd() < 0.12;
@@ -89,6 +98,6 @@ export function demoEndpoints(cols, rows, channels = DEFAULT_CHANNELS) {
       }
     }
 
-    return { id, x, y, slot: (x + y) % 4, flows };
+    return { id, x, y, type: typeOf(id, x, y), slot: (x + y) % 4, flows };
   });
 }

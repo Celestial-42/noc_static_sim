@@ -11,6 +11,7 @@
 - **Mesh 拓扑**：1×1 ～ 12×12，每个 Router 最多挂 4 个端点，原点在左下角，符合 NoC 习惯。
 - **维序路由**：X-Y / Y-X 两种维度顺序，逐跳沿最短路走到目标。
 - **多通道**：内置 REQ / RSP / SNP / DAT，可增删通道；每个通道独立统计链路负载。
+- **节点类型**：每个端点可标记为 `RNF` / `RNI` / `HNF` / `SN` / `HNI`，通道用颜色区分，节点类型用**形状 + 线型**区分（形状画在端点上，线型画在端点与 Router 的连接短线上），用来区分不同角色的流量。
 - **每通道多流**：一个端点在一个通道上可以同时向多个目标注入流量，适合 fan-out / 多播式的近似建模。
 - **duplicate lane**：每条物理链路可配置 ×1 / ×2 / ×4 条并行 lane，lane 选择支持 `X`（target xid bit0）、`Y`（target yid bit0）、`XOR`（src^tgt 均匀异或），画布上逐条 lane 着色。
 - **可视化**：链路按负载着色加粗，方向箭头独立图层；悬停查看链路双向负载、每条 lane 的明细、端点各通道注入与路由预览。
@@ -46,6 +47,16 @@ npm run preview  # 预览构建结果
 - 流按配置的维序路由逐跳前进，每经过一条单向链路就在该方向上累加一次负载。
 - **duplicate lane**：一条流在整个路由过程中固定走同一条 lane，重复 lane 的收益体现在单条 lane 的负载上。
 
+节点类型只描述端点角色，不参与路由与负载计算；改动类型不会影响任何链路指标。
+
+| 类型 | 含义 | 形状 | 短线线型 |
+| --- | --- | --- | --- |
+| `RNF` | Request Node · fully coherent | 圆 | 实线 |
+| `RNI` | Request Node · I/O | 方 | 虚线 |
+| `HNF` | Home Node · fully coherent | 六边形 | 点线 |
+| `SN` | Slave Node | 三角 | 点划线 |
+| `HNI` | Home Node · I/O | 菱形 | 长虚线 |
+
 lane 选择规则（K 为每条链路的 lane 数，`& (K-1)` 取低位）：
 
 | 方式 | 公式 |
@@ -63,11 +74,11 @@ lane 选择规则（K 为每条链路的 lane 数，`& (K-1)` 取低位）：
 
 ## 配置格式
 
-导出的 JSON 为 `version: 3`：
+导出的 JSON 为 `version: 4`：
 
 ```json
 {
-  "version": 3,
+  "version": 4,
   "cols": 4,
   "rows": 4,
   "routing": "xy",
@@ -79,6 +90,7 @@ lane 选择规则（K 为每条链路的 lane 数，`& (K-1)` 取低位）：
       "x": 0,
       "y": 0,
       "slot": 0,
+      "type": "RNI",
       "flows": {
         "REQ": [
           { "target": 3, "rate": 0.4 },
@@ -91,7 +103,8 @@ lane 选择规则（K 为每条链路的 lane 数，`& (K-1)` 取低位）：
 ```
 
 - `lanes.count` 取值 1 / 2 / 4（超出会归一到 4），`lanes.axis` 为 `xid` / `yid` / `xor`。
-- v1/v2 的 `target` / `inject` 字段在导入时自动转换为单条流。
+- `type` 取值 `RNF` / `RNI` / `HNF` / `SN` / `HNI`，缺省或非法值按 `RNF` 处理。
+- v1/v2 的 `target` / `inject` 字段在导入时自动转换为单条流；v3 文件没有 `type`，导入后全部是 `RNF`。
 
 ## 部署
 
@@ -110,8 +123,9 @@ Vite + Svelte 5（runes）+ D3（色标与插值）。无框架后端，全部�
 ```
 src/
   App.svelte              页面骨架、状态与导入导出
-  lib/model.js            拓扑、维序路由、lane 选择与静态负载分析
+  lib/model.js            拓扑、维序路由、lane 选择、节点类型与静态负载分析
   lib/MeshStage.svelte    画布：链路 / 箭头 / 路由预览 / 缩放平移
+  lib/NodeGlyph.svelte    节点类型的形状图标（面板与图例共用）
   lib/TopologyCard.svelte 尺寸、维序、lane 配置
   lib/ChannelCard.svelte  通道列表与各通道峰值负载
   lib/Inspector.svelte    选中对象的详情与流量编辑
