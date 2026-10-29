@@ -13,11 +13,11 @@
 - **多通道**：内置 REQ / RSP / SNP / DAT，可增删通道；每个通道独立统计链路负载。
 - **节点类型**：每个端点可标记为 `RNF` / `RNI` / `HNF` / `SN` / `HNI`，通道用颜色区分，节点类型用**形状 + 线型**区分（形状画在端点上，线型画在端点与 Router 的连接短线上），端点标号后也直接跟类型缩写（如 `E06 HNI`），用来区分不同角色的流量。
 - **每通道多流**：一个端点在一个通道上可以同时向多个目标注入流量，适合 fan-out / 多播式的近似建模。
-- **duplicate lane**：每条物理链路可配置 ×1 / ×2 / ×4 条并行 lane，lane 选择支持 `X`（target xid bit0）、`Y`（target yid bit0）、`XOR`（src^tgt 均匀异或），画布上逐条 lane 着色。
+- **duplicate lane**：按通道配置每条物理链路的并行 lane 数（×1 / ×2 / ×4）与选择方式，支持 `X`（target xid bit0）、`Y`（target yid bit0）、`XOR`（src^tgt 均匀异或），画布上逐条 lane 着色。不同通道可以有各自的 K，例如 REQ 走 ×4、RSP 走 ×2、SNP/DAT 保持单 lane。
 - **可视化**：链路按负载着色加粗，方向箭头独立图层；悬停查看链路双向负载、每条 lane 的明细、端点各通道注入与路由预览。
 - **瓶颈榜**：按单向 lane 负载排序，直接给出最热的若干条链路。
 - **缩放与平移**：滚轮以光标为锚点缩放，拖动平移，双击复位。
-- **导入 / 导出**：JSON 配置一键导出，可再次导入复现（兼容早期 v1/v2 文件）。
+- **导入 / 导出**：JSON 配置一键导出，可再次导入复现（兼容早期 v1/v2/v4 文件）。
 
 ## 快速开始
 
@@ -45,7 +45,7 @@ npm run preview  # 预览构建结果
 
 - 每个端点每个通道可以有多条流，每条流有独立的目标和注入率；注入率以「一条链路带宽」为单位。
 - 流按配置的维序路由逐跳前进，每经过一条单向链路就在该方向上累加一次负载。
-- **duplicate lane**：一条流在整个路由过程中固定走同一条 lane，重复 lane 的收益体现在单条 lane 的负载上。
+- **duplicate lane**：K 与选择方式属于通道级配置；同一条流在整个路由过程中固定走同一条 lane，重复 lane 的收益体现在单条 lane 的负载上。通道之间互不影响。
 
 节点类型只描述端点角色，不参与路由与负载计算；改动类型不会影响任何链路指标。
 
@@ -76,16 +76,18 @@ lane 选择规则（K 为每条链路的 lane 数，`& (K-1)` 取低位）：
 
 ## 配置格式
 
-导出的 JSON 为 `version: 4`：
+导出的 JSON 为 `version: 5`，lane 配置挂在各通道上：
 
 ```json
 {
-  "version": 4,
+  "version": 5,
   "cols": 4,
   "rows": 4,
   "routing": "xy",
-  "lanes": { "count": 2, "axis": "xor" },
-  "channels": [{ "id": "REQ", "color": "#3C6E8F" }],
+  "channels": [
+    { "id": "REQ", "color": "#3C6E8F", "lanes": { "count": 4, "axis": "yid" } },
+    { "id": "RSP", "color": "#5C8A6B", "lanes": { "count": 1, "axis": "xid" } }
+  ],
   "endpoints": [
     {
       "id": 1,
@@ -104,19 +106,10 @@ lane 选择规则（K 为每条链路的 lane 数，`& (K-1)` 取低位）：
 }
 ```
 
-- `lanes.count` 取值 1 / 2 / 4（超出会归一到 4），`lanes.axis` 为 `xid` / `yid` / `xor`。
+- `channels[].lanes.count` 取值 1 / 2 / 4（超出会归一到 4），`lanes.axis` 为 `xid` / `yid` / `xor`；缺省按单 lane 处理。
 - `type` 取值 `RNF` / `RNI` / `HNF` / `SN` / `HNI`，缺省或非法值按 `RNF` 处理。
 - v1/v2 的 `target` / `inject` 字段在导入时自动转换为单条流；v3 文件没有 `type`，导入后全部是 `RNF`。
-
-## 部署
-
-`main` 分支的推送会通过 GitHub Actions（`.github/workflows/deploy.yml`）构建并发布到 GitHub Pages：
-
-<https://celestial-42.github.io/noc_static_sim/>
-
-构建使用相对路径（`base: './'`），所以同一个 `dist/` 也可以直接放在任意静态服务器的子目录下。
-
-首次部署需要在仓库 **Settings → Pages → Build and deployment → Source** 中选中 **GitHub Actions**（这一步需要仓库管理员权限，Actions 内置 token 无法代劳）。之后每次推送 `main` 都会自动构建并发布。
+- v4 及更早的文件只有全局 `lanes`，导入时会把这个设置套用到所有通道。
 
 ## 技术栈
 
@@ -128,8 +121,8 @@ src/
   lib/model.js            拓扑、维序路由、lane 选择、节点类型与静态负载分析
   lib/MeshStage.svelte    画布：链路 / 箭头 / 路由预览 / 缩放平移
   lib/NodeGlyph.svelte    节点类型的形状图标（面板与图例共用）
-  lib/TopologyCard.svelte 尺寸、维序、lane 配置
-  lib/ChannelCard.svelte  通道列表与各通道峰值负载
+  lib/TopologyCard.svelte 尺寸与维序路由
+  lib/ChannelCard.svelte  通道列表、各通道峰值负载与 lane 配置
   lib/Inspector.svelte    选中对象的详情与流量编辑
   lib/BottleneckCard.svelte 瓶颈榜
   lib/theme.js            负载色标与线宽

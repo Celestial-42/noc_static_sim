@@ -1,17 +1,5 @@
 <script>
-  import { LANE_AXES, LANE_OPTIONS } from './model.js';
-
-  let { cols, rows, routing, lanes, max = 12, onDims, onRouting, onLanes } = $props();
-
-  let laneFormula = $derived(
-    lanes.count <= 1
-      ? 'K = 1：整条链路共享一条 lane。'
-      : lanes.axis === 'xid'
-        ? 'lane = target.x & (K − 1)'
-        : lanes.axis === 'yid'
-          ? 'lane = target.y & (K − 1)'
-          : 'lane = (tx ^ ty ^ sx ^ sy) & (K − 1)'
-  );
+  let { cols, rows, routing, max = 12, onDims, onRouting } = $props();
 </script>
 
 <section class="card">
@@ -60,35 +48,6 @@
         Y-X
       </button>
     </div>
-  </div>
-
-  <div class="lane-block">
-    <div class="lane-row">
-      <span class="field-label">重复 lane</span>
-      <div class="seg compact">
-        {#each LANE_OPTIONS as k (k)}
-          <button
-            class:active={lanes.count === k}
-            title={`每条链路 ${k} 条并行 lane`}
-            onclick={() => onLanes({ ...lanes, count: k })}
-          >×{k}</button>
-        {/each}
-      </div>
-    </div>
-    <div class="lane-row">
-      <span class="field-label">lane 选择</span>
-      <div class="seg compact">
-        {#each LANE_AXES as axis (axis.id)}
-          <button
-            class:active={lanes.count > 1 && lanes.axis === axis.id}
-            disabled={lanes.count === 1}
-            title={axis.name}
-            onclick={() => onLanes({ ...lanes, axis: axis.id })}
-          >{axis.label}</button>
-        {/each}
-      </div>
-    </div>
-    <p class="lane-formula mono">{laneFormula}</p>
   </div>
 
   <p class="card-note">
@@ -154,38 +113,5 @@
     align-items: center;
     justify-content: space-between;
     gap: 10px;
-  }
-
-  .lane-block {
-    margin-top: 12px;
-    padding-top: 11px;
-    border-top: 1px dashed var(--line-2);
-  }
-
-  .lane-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-  }
-
-  .lane-row + .lane-row {
-    margin-top: 8px;
-  }
-
-  .seg.compact button {
-    padding: 4px 9px;
-    font-size: 10.5px;
-  }
-
-  .seg.compact button:disabled {
-    color: #c1b8a6;
-  }
-
-  .lane-formula {
-    margin-top: 7px;
-    font-size: 9.5px;
-    color: var(--muted);
-    letter-spacing: 0.01em;
   }
 </style>

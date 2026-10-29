@@ -1,7 +1,18 @@
 <script>
+  import { LANE_AXES, LANE_OPTIONS } from './model.js';
   import { loadColor } from './theme.js';
 
-  let { channels, activeId, analysis, onSelect, onAdd, onRemove } = $props();
+  let { channels, activeId, lanes, analysis, onSelect, onAdd, onRemove, onLanes } = $props();
+
+  let laneFormula = $derived(
+    lanes.count <= 1
+      ? 'K = 1：整条链路共享一条 lane。'
+      : lanes.axis === 'xid'
+        ? 'lane = target.x & (K − 1)'
+        : lanes.axis === 'yid'
+          ? 'lane = target.y & (K − 1)'
+          : 'lane = (tx ^ ty ^ sx ^ sy) & (K − 1)'
+  );
 </script>
 
 <section class="card">
@@ -19,6 +30,9 @@
         <button class="ch-select" onclick={() => onSelect(ch.id)}>
           <span class="dot" style:background={ch.color}></span>
           <span class="ch-id mono">{ch.id}</span>
+          {#if ch.lanes?.count > 1}
+            <span class="lane-chip mono">×{ch.lanes.count}</span>
+          {/if}
         </button>
         <span class="ch-meter" title="峰值 lane 负载">
           <span
@@ -36,8 +50,44 @@
     {/each}
   </ul>
 
+  <div class="lane-block">
+    <div class="lane-head">
+      <span class="field-label">lane 配置</span>
+      <span class="lane-scope mono">
+        <span class="dot" style:background={channels.find((c) => c.id === activeId)?.color}></span>
+        {activeId}
+      </span>
+    </div>
+    <div class="lane-row">
+      <span class="field-label">重复 lane</span>
+      <div class="seg compact">
+        {#each LANE_OPTIONS as k (k)}
+          <button
+            class:active={lanes.count === k}
+            title={`该通道每条链路 ${k} 条并行 lane`}
+            onclick={() => onLanes({ ...lanes, count: k })}
+          >×{k}</button>
+        {/each}
+      </div>
+    </div>
+    <div class="lane-row">
+      <span class="field-label">lane 选择</span>
+      <div class="seg compact">
+        {#each LANE_AXES as axis (axis.id)}
+          <button
+            class:active={lanes.count > 1 && lanes.axis === axis.id}
+            disabled={lanes.count === 1}
+            title={axis.name}
+            onclick={() => onLanes({ ...lanes, axis: axis.id })}
+          >{axis.label}</button>
+        {/each}
+      </div>
+    </div>
+    <p class="lane-formula mono">{laneFormula}</p>
+  </div>
+
   <button class="add" onclick={onAdd}>＋ 新增通道</button>
-  <p class="card-note">通道之间独立计算链路负载；细条为该通道最热 lane 的负载，K=1 时即链路负载。</p>
+  <p class="card-note">通道之间独立计算链路负载；细条为该通道最热 lane 的负载，K=1 时即链路负载。lane 数（×1/×2/×4）与选择方式按通道单独配置。</p>
 </section>
 
 <style>
@@ -90,6 +140,71 @@
   .ch-row.active .ch-id {
     color: var(--accent);
     font-weight: 500;
+  }
+
+  .lane-chip {
+    flex: none;
+    padding: 0 5px;
+    font-size: 9.5px;
+    line-height: 15px;
+    color: var(--ink-3);
+    background: #f1ece1;
+    border-radius: 5px;
+  }
+
+  .ch-row.active .lane-chip {
+    color: var(--accent);
+    background: #e4eeea;
+  }
+
+  .lane-block {
+    margin: 2px -6px 10px;
+    padding: 10px 6px 0;
+    border-top: 1px dashed var(--line-2);
+  }
+
+  .lane-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 7px;
+  }
+
+  .lane-scope {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 9.5px;
+    color: var(--ink-3);
+    letter-spacing: 0.04em;
+  }
+
+  .lane-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .lane-row + .lane-row {
+    margin-top: 8px;
+  }
+
+  .seg.compact button {
+    padding: 4px 9px;
+    font-size: 10.5px;
+  }
+
+  .seg.compact button:disabled {
+    color: #c1b8a6;
+  }
+
+  .lane-formula {
+    margin-top: 7px;
+    font-size: 9.5px;
+    color: var(--muted);
+    letter-spacing: 0.01em;
   }
 
   .ch-meter {

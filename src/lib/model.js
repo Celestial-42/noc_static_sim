@@ -1,8 +1,19 @@
+/** Duplicate-lane configuration: K parallel rails per physical link. */
+export const LANE_OPTIONS = [1, 2, 4];
+
+export const LANE_AXES = [
+  { id: 'xid', label: 'X', name: 'target xid bit0' },
+  { id: 'yid', label: 'Y', name: 'target yid bit0' },
+  { id: 'xor', label: 'XOR', name: 'src^tgt 均匀异或' }
+];
+
+export const DEFAULT_LANES = { count: 1, axis: 'xid' };
+
 export const DEFAULT_CHANNELS = [
-  { id: 'REQ', color: '#3C6E8F' },
-  { id: 'RSP', color: '#5C8A6B' },
-  { id: 'SNP', color: '#B0793C' },
-  { id: 'DAT', color: '#8A5A8F' }
+  { id: 'REQ', color: '#3C6E8F', lanes: { ...DEFAULT_LANES } },
+  { id: 'RSP', color: '#5C8A6B', lanes: { ...DEFAULT_LANES } },
+  { id: 'SNP', color: '#B0793C', lanes: { ...DEFAULT_LANES } },
+  { id: 'DAT', color: '#8A5A8F', lanes: { ...DEFAULT_LANES } }
 ];
 
 export const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
@@ -89,16 +100,6 @@ export function channelRate(ep, chId) {
 }
 
 /** Duplicate-lane configuration: K parallel rails per physical link. */
-export const LANE_OPTIONS = [1, 2, 4];
-
-export const LANE_AXES = [
-  { id: 'xid', label: 'X', name: 'target xid bit0' },
-  { id: 'yid', label: 'Y', name: 'target yid bit0' },
-  { id: 'xor', label: 'XOR', name: 'src^tgt 均匀异或' }
-];
-
-export const DEFAULT_LANES = { count: 1, axis: 'xid' };
-
 export function normalizeLaneCount(value) {
   const n = Math.round(Number(value) || 1);
   if (n <= 1) return 1;
@@ -107,6 +108,10 @@ export function normalizeLaneCount(value) {
 
 export function normalizeLaneAxis(value) {
   return LANE_AXES.some((a) => a.id === value) ? value : 'xid';
+}
+
+export function normalizeLanes(value) {
+  return { count: normalizeLaneCount(value?.count), axis: normalizeLaneAxis(value?.axis) };
 }
 
 /** lane = coordinate & (K-1); a flow keeps one lane on every hop of its route. */
@@ -180,15 +185,15 @@ export function nodeShapePath(value, r) {
  *
  * With duplicate lanes (K > 1) every link carries K rails: a flow sticks to one
  * lane for its whole route, so the load that matters per rail is the per-lane
- * load, not the aggregate on the physical link.
+ * load, not the aggregate on the physical link. K and the lane-select axis are
+ * configured per channel.
  */
-export function analyze({ routing, channels, endpoints, lanes }) {
+export function analyze({ routing, channels, endpoints }) {
   const byId = new Map(endpoints.map((e) => [e.id, e]));
-  const laneCount = normalizeLaneCount(lanes?.count);
-  const laneAxis = normalizeLaneAxis(lanes?.axis);
   const byChannel = {};
 
   for (const ch of channels) {
+    const { count: laneCount, axis: laneAxis } = normalizeLanes(ch.lanes);
     const dirLoad = new Map();
     const dirLaneLoad = new Map();
     const dirFlows = new Map();

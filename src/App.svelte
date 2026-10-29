@@ -10,9 +10,8 @@
     dirKey,
     analyze,
     makeMesh,
-    normalizeLaneAxis,
-    normalizeLaneCount,
     normalizeNodeType,
+    normalizeLanes,
     parseRouterKey
   } from './lib/model.js';
   import { CHANNEL_COLORS } from './lib/theme.js';
@@ -31,8 +30,7 @@
   let cols = $state(4);
   let rows = $state(4);
   let routing = $state('xy');
-  let lanes = $state({ ...DEFAULT_LANES });
-  let channels = $state(DEFAULT_CHANNELS.map((c) => ({ ...c })));
+  let channels = $state(DEFAULT_CHANNELS.map((c) => ({ ...c, lanes: { ...c.lanes } })));
   let endpoints = $state(demoEndpoints(4, 4, DEFAULT_CHANNELS));
   let activeChannel = $state('REQ');
   let selected = $state({ kind: null, id: null });
@@ -42,11 +40,12 @@
   let toastTimer;
 
   let mesh = $derived(makeMesh(cols, rows));
-  let analysis = $derived(analyze({ routing, channels, endpoints, lanes }));
+  let analysis = $derived(analyze({ routing, channels, endpoints }));
   let active = $derived(analysis.channels[activeChannel] ?? null);
   let activeCh = $derived(channels.find((c) => c.id === activeChannel) ?? channels[0]);
   let activeColor = $derived(activeCh?.color ?? '#3C6E8F');
-  let laneAxisLabel = $derived(LANE_AXES.find((a) => a.id === lanes.axis)?.label ?? 'X');
+  let activeLanes = $derived(normalizeLanes(activeCh?.lanes));
+  let laneAxisLabel = $derived(LANE_AXES.find((a) => a.id === activeLanes.axis)?.label ?? 'X');
 
   let linkViews = $derived(
     mesh.links.map((link) => {
@@ -81,9 +80,9 @@
     const peak = active.peakFrom
       ? `R(${active.peakFrom.x},${active.peakFrom.y}) → R(${active.peakTo.x},${active.peakTo.y})`
       : '—';
-    const laneTag = lanes.count > 1 ? ` L${active.maxLane}` : '';
-    const laneNote = lanes.count > 1 ? `${lanes.count} lane · ${laneAxisLabel} 选择` : '单 lane';
-    const unit = lanes.count > 1 ? '条 lane' : '条链路';
+    const laneTag = activeLanes.count > 1 ? ` L${active.maxLane}` : '';
+    const laneNote = activeLanes.count > 1 ? `${activeLanes.count} lane · ${laneAxisLabel} 选择` : '单 lane';
+    const unit = activeLanes.count > 1 ? '条 lane' : '条链路';
     if (active.overCount === 0) {
       return `${activeChannel} 通道（${laneNote}）无超额，峰值 ${peak}${laneTag} 为 ${fmt(active.maxLoad)}×。`;
     }
@@ -151,11 +150,10 @@
     routing = next;
   }
 
-  function setLanes(next) {
-    lanes = {
-      count: normalizeLaneCount(next?.count),
-      axis: normalizeLaneAxis(next?.axis)
-    };
+  function setLanes(id, next) {
+    const ch = channels.find((c) => c.id === id);
+    if (!ch) return;
+    ch.lanes = normalizeLanes(next);
   }
 
   function setChannel(id) {
@@ -170,7 +168,7 @@
       id = `CH${n}`;
     }
     const color = CHANNEL_COLORS[channels.length % CHANNEL_COLORS.length];
-    channels = [...channels, { id, color }];
+    channels = [...channels, { id, color, lanes: { ...DEFAULT_LANES } }];
     for (const ep of endpoints) {
       ep.flows ??= {};
       ep.flows[id] = [{ target: endpoints.find((t) => t.id !== ep.id)?.id ?? -1, rate: 0 }];
@@ -224,11 +222,10 @@
 
   function exportJSON() {
     const payload = {
-      version: 4,
+      version: 5,
       cols,
       rows,
       routing,
-      lanes: { count: lanes.count, axis: lanes.axis },
       channels: $state.snapshot(channels),
       endpoints: $state.snapshot(endpoints)
     };
@@ -253,9 +250,12 @@
       }
       const c = clamp(Number(data.cols) || 4, 1, MAX_DIM);
       const r = clamp(Number(data.rows) || 4, 1, MAX_DIM);
+      // v5 keeps lanes on each channel; older files carried one global setting
+      const globalLanes = data.lanes;
       const nextChannels = data.channels.map((ch) => ({
         id: String(ch.id ?? 'CH'),
-        color: ch.color || CHANNEL_COLORS[0]
+        color: ch.color || CHANNEL_COLORS[0],
+        lanes: normalizeLanes(ch.lanes ?? globalLanes)
       }));
       const nextEndpoints = data.endpoints.map((ep, index) => {
         const flows = {};
@@ -290,7 +290,6 @@
       cols = c;
       rows = r;
       routing = data.routing === 'yx' ? 'yx' : 'xy';
-      setLanes(data.lanes);
       channels = nextChannels;
       endpoints = nextEndpoints;
       activeChannel = nextChannels[0]?.id ?? 'REQ';
@@ -336,7 +335,7 @@
       <div class="chips mono">
         <span class="chip">{cols} × {rows} mesh</span>
         <span class="chip">{routing === 'xy' ? 'X-Y' : 'Y-X'} route</span>
-        <span class="chip">{lanes.count > 1 ? `${lanes.count}× lane · ${laneAxisLabel}` : 'single lane'}</span>
+        <span class="chip">{activeLanes.count > 1 ? `${activeChannel} ${activeLanes.count}× lane · ${laneAxisLabel}` : `${activeChannel} single lane`}</span>
         <span class="chip">{endpoints.length} endpoints</span>
       </div>
       <div class="actions">
@@ -353,20 +352,20 @@
         <div class="stage-channel">
           <span class="dot" style:background={activeColor}></span>
           <span class="stage-channel-name">{activeChannel}</span>
-          {#if lanes.count > 1}
-            <span class="lane-badge mono">×{lanes.count}</span>
+          {#if activeLanes.count > 1}
+            <span class="lane-badge mono">×{activeLanes.count}</span>
           {/if}
         </div>
 
         <div class="stage-kpis">
-          <div class="kpi" title={lanes.count > 1 ? '最热 lane 的负载（每链路并列 K 条 lane）' : '单向链路负载的最大值'}>
+          <div class="kpi" title={activeLanes.count > 1 ? '最热 lane 的负载（每链路并列 K 条 lane）' : '单向链路负载的最大值'}>
             <span class="k">峰值</span>
             <span class="v display"><NumberTween value={active?.maxLoad ?? 0} /><span class="u">×</span></span>
           </div>
           <div
             class="kpi"
             class:over={(active?.overCount ?? 0) > 0}
-            title={lanes.count > 1 ? '负载超过 1.0× 的单条 lane 数量' : '负载超过 1.0× 的链路数量'}
+            title={activeLanes.count > 1 ? '负载超过 1.0× 的单条 lane 数量' : '负载超过 1.0× 的链路数量'}
           >
             <span class="k">超额</span>
             <span class="v display"><NumberTween value={active?.overCount ?? 0} digits={0} /><span class="u">条</span></span>
@@ -402,7 +401,7 @@
       <div class="stage-bottom">
         <div class="legend">
           <div class="legend-head">
-            <span class="legend-title">{lanes.count > 1 ? 'lane 负载' : '链路负载'}</span>
+            <span class="legend-title">{activeLanes.count > 1 ? 'lane 负载' : '链路负载'}</span>
             <span class="legend-unit mono">× 带宽</span>
           </div>
           <div class="legend-track"></div>
@@ -417,7 +416,7 @@
           <p class="hand">{insight}</p>
           <p class="meta mono">
             {cols} × {rows} MESH · {routing === 'xy' ? 'X-Y' : 'Y-X'} ROUTE ·
-            {lanes.count > 1 ? `${lanes.count} LANE ${laneAxisLabel}` : 'SINGLE LANE'} · {endpoints.length} ENDPOINTS ·
+            {activeLanes.count > 1 ? `${activeChannel} ${activeLanes.count} LANE ${laneAxisLabel}` : `${activeChannel} SINGLE LANE`} · {endpoints.length} ENDPOINTS ·
             {channels.length} CHANNELS
           </p>
         </footer>
@@ -454,14 +453,16 @@
     </section>
 
     <aside class="panel">
-      <TopologyCard {cols} {rows} {routing} {lanes} max={MAX_DIM} onDims={setDims} onRouting={setRouting} onLanes={setLanes} />
+      <TopologyCard {cols} {rows} {routing} max={MAX_DIM} onDims={setDims} onRouting={setRouting} />
       <ChannelCard
         {channels}
         activeId={activeChannel}
+        lanes={activeLanes}
         {analysis}
         onSelect={setChannel}
         onAdd={addChannel}
         onRemove={removeChannel}
+        onLanes={(next) => setLanes(activeChannel, next)}
       />
       <Inspector
         selection={selected}
