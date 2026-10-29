@@ -640,13 +640,11 @@
     return { x: px(ep.x) + dx * EP_DIST, y: py(ep.y) + dy * EP_DIST, dx, dy };
   }
 
-  const hits = (a, b) =>
-    a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
-
   // Endpoint id labels: outward of the dot, nudged aside when a neighbour is in the way
   let labelLayout = $derived.by(() => {
     const fs = epLabelSize;
-    const th = fs * 1.15;
+    // Real text box is ~1.34em tall; reserve that so stacked labels never touch.
+    const th = fs * 1.4;
     const taken = [];
     for (let y = 0; y < rows; y++) {
       for (let x = 0; x < cols; x++) {
@@ -654,26 +652,64 @@
       }
     }
     const out = new Map();
+    // Labels also stay clear of neighbouring markers, which no rect above covers.
+    const markers = endpoints.map((ep) => {
+      const p = epPos(ep);
+      const r = 9.5;
+      return { id: ep.id, x: p.x - r, y: p.y - r, w: r * 2, h: r * 2 };
+    });
+    const overlapOf = (r, skipId) => {
+      let area = 0;
+      for (const t of taken) {
+        const ox = Math.min(r.x + r.w, t.x + t.w) - Math.max(r.x, t.x);
+        const oy = Math.min(r.y + r.h, t.y + t.h) - Math.max(r.y, t.y);
+        if (ox > 0 && oy > 0) area += ox * oy;
+      }
+      for (const m of markers) {
+        if (m.id === skipId) continue;
+        const ox = Math.min(r.x + r.w, m.x + m.w) - Math.max(r.x, m.x);
+        const oy = Math.min(r.y + r.h, m.y + m.h) - Math.max(r.y, m.y);
+        if (ox > 0 && oy > 0) area += ox * oy * 4;
+      }
+      return area;
+    };
     for (const ep of endpoints) {
       const p = epPos(ep);
-      const tw = endpointLabel(ep.id).length * fs * 0.62;
+      // id + gap + three-letter node type
+      const tw = endpointLabel(ep.id).length * fs * 0.62 + fs * 1.86;
       const vert = p.dy * (12 + th / 2);
       const diagY = p.dy * (th / 2 + 6);
+      const opt = (dx, dy, anchor = 'middle') => {
+        const x = p.x + dx;
+        const left = anchor === 'start' ? x : anchor === 'end' ? x - tw : x - tw / 2;
+        return { x, y: p.y + dy, anchor, left };
+      };
       const cands = [
-        { x: p.x, y: p.y + vert, anchor: 'middle', left: p.x - tw / 2 },
-        { x: p.x + p.dx * 9, y: p.y + diagY, anchor: p.dx > 0 ? 'start' : 'end', left: p.dx > 0 ? p.x + p.dx * 9 : p.x + p.dx * 9 - tw },
-        { x: p.x, y: p.y - vert, anchor: 'middle', left: p.x - tw / 2 },
-        { x: p.x + p.dx * (12 + tw / 2), y: p.y, anchor: 'middle', left: p.x + p.dx * (12 + tw / 2) - tw / 2 }
+        opt(0, vert),
+        opt(p.dx * 9, diagY, p.dx > 0 ? 'start' : 'end'),
+        opt(0, -vert),
+        opt(p.dx * (12 + tw / 2), 0),
+        opt(0, vert * 1.9),
+        opt(-p.dx * (12 + tw / 2), 0),
+        opt(0, -vert * 1.9)
       ];
-      let pick = cands[0];
+      let pick = null;
+      let best = Infinity;
       for (const c of cands) {
         const r = { x: c.left, y: c.y - th / 2, w: tw, h: th };
-        if (!taken.some((t) => hits(r, t))) {
+        const overlap = overlapOf(r, ep.id);
+        if (overlap === 0) {
           pick = c;
-          taken.push(r);
+          best = 0;
           break;
         }
+        if (overlap < best) {
+          best = overlap;
+          pick = c;
+        }
       }
+      const r = { x: pick.left, y: pick.y - th / 2, w: tw, h: th };
+      taken.push(r);
       out.set(ep.id, pick);
     }
     return out;
@@ -950,7 +986,9 @@
                 dominant-baseline="middle"
                 style:font-size={`${epLabelSize}px`}
               >
-                {endpointLabel(ep.id)}
+                {endpointLabel(ep.id)}<tspan class="endpoint-type" dx={epLabelSize * 0.34}
+                  >{nodeTypeOf(ep.type).id}</tspan
+                >
               </text>
             </g>
           {/each}
@@ -1308,6 +1346,16 @@
   .endpoint-label.active {
     fill: #2f5d62;
     font-weight: 500;
+  }
+
+  .endpoint-type {
+    font-size: 0.82em;
+    fill: #b8ae9b;
+    letter-spacing: 0.03em;
+  }
+
+  .endpoint-label.active .endpoint-type {
+    fill: #6f9694;
   }
 
   .endpoint-body.active {
