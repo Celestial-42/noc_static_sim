@@ -25,6 +25,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+      # GITHUB_TOKEN 没有管理员权限，首次仍需在 Settings → Pages
+      # 把 Source 设为 GitHub Actions；站点存在后此处不会再尝试创建。
       - uses: actions/configure-pages@v5
         with:
           enablement: true

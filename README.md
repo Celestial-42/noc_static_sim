@@ -101,6 +101,8 @@ lane 选择规则（K 为每条链路的 lane 数，`& (K-1)` 取低位）：
 
 构建使用相对路径（`base: './'`），所以同一个 `dist/` 也可以直接放在任意静态服务器的子目录下。
 
+首次部署需要在仓库 **Settings → Pages → Build and deployment → Source** 中选中 **GitHub Actions**（这一步需要仓库管理员权限，Actions 内置 token 无法代劳）。之后每次推送 `main` 都会自动构建并发布。
+
 ## 技术栈
 
 Vite + Svelte 5（runes）+ D3（色标与插值）。无框架后端，全部计算在浏览器内完成。
